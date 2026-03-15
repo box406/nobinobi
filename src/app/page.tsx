@@ -1,65 +1,139 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import StreakCounter from "@/components/StreakCounter";
+import RoutineList from "@/components/RoutineList";
+import BottomNav from "@/components/BottomNav";
+import { checkAndUpdateStreak, isTodayCompleted } from "@/lib/streak";
+import { getRoutines, setRoutines, type Routine, type StreakData } from "@/lib/storage";
+import { getNextBodyPart, selectOmakaseStretches, estimateDuration } from "@/lib/omakase";
+import stretches from "@/data/stretches.json";
 
 export default function Home() {
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  const [streak, setStreak] = useState<StreakData>({
+    currentStreak: 0,
+    longestStreak: 0,
+    completedDates: [],
+    lastCompletedDate: null,
+  });
+  const [todayDone, setTodayDone] = useState(false);
+  const [routines, setRoutinesState] = useState<Routine[]>([]);
+  const [nextBodyPart, setNextBodyPart] = useState({ bodyPart: "首", emoji: "🦒" });
+
+  useEffect(() => {
+    setMounted(true);
+    const s = checkAndUpdateStreak();
+    setStreak(s);
+    setTodayDone(isTodayCompleted());
+    setRoutinesState(getRoutines());
+    setNextBodyPart(getNextBodyPart());
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
+  const handleOmakase = useCallback(() => {
+    const selected = selectOmakaseStretches(stretches);
+    const ids = selected.map((s) => s.id).join(",");
+    router.push(`/stretch?ids=${ids}&mode=omakase`);
+  }, [router]);
+
+  const handleRoutineSelect = useCallback(
+    (routine: Routine) => {
+      const ids = routine.stretchIds.join(",");
+      router.push(`/stretch?ids=${ids}&mode=routine`);
+    },
+    [router]
+  );
+
+  const handleRoutineDelete = useCallback((id: string) => {
+    const updated = getRoutines().filter((r) => r.id !== id);
+    setRoutines(updated);
+    setRoutinesState(updated);
+  }, []);
+
+  if (!mounted) return null;
+
+  const omakasePreview = stretches.filter((s) =>
+    s.bodyPart.includes(nextBodyPart.bodyPart)
+  );
+  const avgDuration = Math.round(
+    estimateDuration(omakasePreview.slice(0, 5)) / 60
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="relative z-10 min-h-dvh pb-20">
+      <div className="max-w-md mx-auto px-4 pt-10 pb-4">
+        {/* Header */}
+        <div className="text-center mb-8 animate-fade-up">
+          <h1 className="text-3xl font-black text-emerald-800 mb-1">
+            🧘 のびのび
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-sm font-bold text-emerald-600/70">
+            毎日のストレッチを習慣に
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Streak */}
+        <div
+          className="mb-6 animate-fade-up"
+          style={{ animationDelay: "0.1s" }}
+        >
+          <StreakCounter
+            currentStreak={streak.currentStreak}
+            longestStreak={streak.longestStreak}
+            todayCompleted={todayDone}
+          />
         </div>
-      </main>
+
+        {/* Omakase Button */}
+        <button
+          onClick={handleOmakase}
+          className="omakase-btn w-full rounded-2xl p-5 mb-6 text-left animate-fade-up"
+          style={{ animationDelay: "0.2s" }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-emerald-500 mb-1">
+                おまかせストレッチ
+              </p>
+              <p className="text-lg font-black text-emerald-800">
+                今日は{nextBodyPart.emoji} {nextBodyPart.bodyPart}の日
+              </p>
+              <p className="text-sm font-bold text-emerald-600/70 mt-0.5">
+                約{avgDuration}分 ・ タップで開始
+              </p>
+            </div>
+            <span className="text-4xl">{nextBodyPart.emoji}</span>
+          </div>
+        </button>
+
+        {/* My Routines */}
+        <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-black text-emerald-800">
+              📋 マイメニュー
+            </h2>
+            <button
+              onClick={() => router.push("/builder")}
+              className="text-xs font-bold text-emerald-500 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 transition-colors"
+            >
+              + 新規作成
+            </button>
+          </div>
+          <RoutineList
+            routines={routines}
+            onSelect={handleRoutineSelect}
+            onDelete={handleRoutineDelete}
+          />
+        </div>
+      </div>
+
+      <BottomNav />
     </div>
   );
 }
