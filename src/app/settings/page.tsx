@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import BottomNav from "@/components/BottomNav";
 import { getSettings, setSettings, getStreak, type Settings } from "@/lib/storage";
+import {
+  subscribePush,
+  unsubscribePush,
+  saveSubscription,
+  removeSubscription,
+  getSubscriptionStatus,
+} from "@/lib/notification";
 
 export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
@@ -16,16 +23,27 @@ export default function SettingsPage() {
     longestStreak: 0,
     totalDays: 0,
   });
+  const [pushStatus, setPushStatus] = useState<
+    "idle" | "subscribing" | "subscribed" | "error" | "denied"
+  >("idle");
 
   useEffect(() => {
     setMounted(true);
-    setSettingsState(getSettings());
+    const s = getSettings();
+    setSettingsState(s);
     const streak = getStreak();
     setStreakInfo({
       currentStreak: streak.currentStreak,
       longestStreak: streak.longestStreak,
       totalDays: streak.completedDates.length,
     });
+
+    // Check current push status
+    if (s.reminderEnabled) {
+      getSubscriptionStatus().then((active) => {
+        setPushStatus(active ? "subscribed" : "idle");
+      });
+    }
   }, []);
 
   const updateSetting = <K extends keyof Settings>(
@@ -36,6 +54,50 @@ export default function SettingsPage() {
     setSettingsState(updated);
     setSettings(updated);
   };
+
+  const handleToggleReminder = useCallback(async () => {
+    if (settings.reminderEnabled) {
+      // Disable
+      updateSetting("reminderEnabled", false);
+      setPushStatus("idle");
+      await unsubscribePush();
+      await removeSubscription();
+      return;
+    }
+
+    // Enable
+    setPushStatus("subscribing");
+    const subscription = await subscribePush();
+
+    if (!subscription) {
+      setPushStatus("denied");
+      return;
+    }
+
+    const saved = await saveSubscription(subscription, settings.reminderTime);
+    if (saved) {
+      updateSetting("reminderEnabled", true);
+      setPushStatus("subscribed");
+    } else {
+      setPushStatus("error");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.reminderEnabled, settings.reminderTime]);
+
+  const handleTimeChange = useCallback(
+    async (time: string) => {
+      updateSetting("reminderTime", time);
+      // Update server with new time
+      if (pushStatus === "subscribed") {
+        const subscription = await subscribePush();
+        if (subscription) {
+          await saveSubscription(subscription, time);
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pushStatus]
+  );
 
   if (!mounted) return null;
 
@@ -73,12 +135,11 @@ export default function SettingsPage() {
               リマインダー通知
             </label>
             <button
-              onClick={() =>
-                updateSetting("reminderEnabled", !settings.reminderEnabled)
-              }
+              onClick={handleToggleReminder}
+              disabled={pushStatus === "subscribing"}
               className={`w-12 h-7 rounded-full transition-all relative ${
                 settings.reminderEnabled ? "bg-emerald-500" : "bg-gray-300"
-              }`}
+              } ${pushStatus === "subscribing" ? "opacity-50" : ""}`}
             >
               <div
                 className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
@@ -89,13 +150,40 @@ export default function SettingsPage() {
               />
             </button>
           </div>
+
+          {pushStatus === "subscribing" && (
+            <p className="text-xs text-emerald-500 font-bold mb-2">
+              通知を設定中...
+            </p>
+          )}
+          {pushStatus === "denied" && (
+            <p className="text-xs text-red-500 font-bold mb-2">
+              通知が許可されていません。ブラウザの設定から許可してください。
+            </p>
+          )}
+          {pushStatus === "error" && (
+            <p className="text-xs text-red-500 font-bold mb-2">
+              設定に失敗しました。もう一度お試しください。
+            </p>
+          )}
+          {pushStatus === "subscribed" && (
+            <p className="text-xs text-emerald-500 font-bold mb-2">
+              ✓ 通知が有効です
+            </p>
+          )}
+
           {settings.reminderEnabled && (
-            <input
-              type="time"
-              value={settings.reminderTime}
-              onChange={(e) => updateSetting("reminderTime", e.target.value)}
-              className="bg-emerald-50 rounded-xl px-4 py-2 text-emerald-800 font-bold outline-none focus:ring-2 focus:ring-emerald-400"
-            />
+            <div>
+              <label className="text-xs font-bold text-emerald-600/70 mb-1 block">
+                通知時刻
+              </label>
+              <input
+                type="time"
+                value={settings.reminderTime}
+                onChange={(e) => handleTimeChange(e.target.value)}
+                className="bg-emerald-50 rounded-xl px-4 py-2 text-emerald-800 font-bold outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
           )}
         </div>
 
