@@ -33,12 +33,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ sent: 0, message: "No subscriptions" });
     }
 
-    // Get current hour/minute in JST (UTC+9)
-    const now = new Date();
-    const jstHour = (now.getUTCHours() + 9) % 24;
-    const jstMinute = now.getUTCMinutes();
-    const currentTime = `${String(jstHour).padStart(2, "0")}:${String(jstMinute).padStart(2, "0")}`;
-
     const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
     let sent = 0;
     let failed = 0;
@@ -49,13 +43,6 @@ export async function POST(request: Request) {
         reminderTime: string;
       }>(key);
       if (!data) continue;
-
-      // Check if it's time to send (within 30 min window for hourly cron)
-      const [targetH, targetM] = data.reminderTime.split(":").map(Number);
-      const targetMinutes = targetH * 60 + targetM;
-      const currentMinutes = jstHour * 60 + jstMinute;
-      const diff = Math.abs(currentMinutes - targetMinutes);
-      if (diff > 30 && diff < 1410) continue; // 30 min tolerance
 
       try {
         await webpush.sendNotification(
@@ -72,7 +59,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ sent, failed, time: currentTime });
+    return NextResponse.json({ sent, failed });
   } catch (error) {
     console.error("Push send error:", error);
     return NextResponse.json({ error: "Failed to send" }, { status: 500 });
