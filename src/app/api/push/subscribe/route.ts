@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+import { redis } from "@/lib/redis";
 
 export async function POST(request: Request) {
   try {
@@ -8,9 +8,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
     }
 
-    // Use endpoint hash as key to avoid duplicates
     const key = `push:${Buffer.from(subscription.endpoint).toString("base64url").slice(0, 64)}`;
-    await kv.set(key, { subscription, reminderTime }, { ex: 60 * 60 * 24 * 90 }); // 90 days TTL
+    await redis.set(key, JSON.stringify({ subscription, reminderTime }), { ex: 60 * 60 * 24 * 90 });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+import { redis } from "@/lib/redis";
 import webpush from "web-push";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
@@ -20,7 +20,6 @@ const MESSAGES = [
 ];
 
 export async function POST(request: Request) {
-  // Verify cron secret or allow in development
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const keys = await kv.keys("push:*");
+    const keys = await redis.keys("push:*");
     if (keys.length === 0) {
       return NextResponse.json({ sent: 0, message: "No subscriptions" });
     }
@@ -38,11 +37,11 @@ export async function POST(request: Request) {
     let failed = 0;
 
     for (const key of keys) {
-      const data = await kv.get<{
-        subscription: webpush.PushSubscription;
-        reminderTime: string;
-      }>(key);
-      if (!data) continue;
+      const raw = await redis.get<string>(key);
+      if (!raw) continue;
+
+      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (!data?.subscription) continue;
 
       try {
         await webpush.sendNotification(
@@ -53,7 +52,7 @@ export async function POST(request: Request) {
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number }).statusCode;
         if (statusCode === 410 || statusCode === 404) {
-          await kv.del(key);
+          await redis.del(key);
         }
         failed++;
       }
