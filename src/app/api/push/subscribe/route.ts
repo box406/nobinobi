@@ -9,7 +9,8 @@ export async function POST(request: Request) {
     }
 
     const key = `push:${Buffer.from(subscription.endpoint).toString("base64url").slice(0, 64)}`;
-    await redis.set(key, JSON.stringify({ subscription, reminderTime }), { ex: 60 * 60 * 24 * 90 });
+    const value = JSON.stringify({ subscription, reminderTime });
+    await redis.set(key, value, "EX", 60 * 60 * 24 * 90); // 90 days TTL
 
     return NextResponse.json({ ok: true });
   } catch (error) {

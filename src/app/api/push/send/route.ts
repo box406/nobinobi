@@ -37,10 +37,10 @@ export async function POST(request: Request) {
     let failed = 0;
 
     for (const key of keys) {
-      const raw = await redis.get<string>(key);
+      const raw = await redis.get(key);
       if (!raw) continue;
 
-      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const data = JSON.parse(raw);
       if (!data?.subscription) continue;
 
       try {
