@@ -10,6 +10,10 @@ interface TimerProps {
   isStarted: boolean;
 }
 
+interface TimerHandle {
+  onSideStart: () => void;
+}
+
 export default function Timer({
   duration,
   sides,
@@ -17,11 +21,12 @@ export default function Timer({
   isPaused,
   isStarted,
 }: TimerProps) {
-  const totalDuration = sides === "both" ? duration : duration;
+  const totalDuration = duration;
   const [timeLeft, setTimeLeft] = useState(totalDuration);
   const [currentSide, setCurrentSide] = useState<"right" | "left" | "done">(
     sides === "both" ? "right" : "done"
   );
+  const [waitingForSideStart, setWaitingForSideStart] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -32,7 +37,7 @@ export default function Timer({
   }, []);
 
   useEffect(() => {
-    if (!isStarted || isPaused) {
+    if (!isStarted || isPaused || waitingForSideStart) {
       clearTimer();
       return;
     }
@@ -42,6 +47,7 @@ export default function Timer({
         if (prev <= 1) {
           if (sides === "both" && currentSide === "right") {
             setCurrentSide("left");
+            setWaitingForSideStart(true);
             return duration;
           }
           clearTimer();
@@ -53,12 +59,13 @@ export default function Timer({
     }, 1000);
 
     return clearTimer;
-  }, [isStarted, isPaused, currentSide, sides, duration, onComplete, clearTimer]);
+  }, [isStarted, isPaused, waitingForSideStart, currentSide, sides, duration, onComplete, clearTimer]);
 
   // Reset when duration changes (new stretch)
   useEffect(() => {
     setTimeLeft(duration);
     setCurrentSide(sides === "both" ? "right" : "done");
+    setWaitingForSideStart(false);
   }, [duration, sides]);
 
   const radius = 54;
@@ -97,25 +104,35 @@ export default function Timer({
         </div>
       </div>
       {sides === "both" && (
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-sm font-bold px-3 py-1 rounded-full ${
-              currentSide === "right"
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-gray-100 text-gray-400"
-            }`}
-          >
-            → 右側
-          </span>
-          <span
-            className={`text-sm font-bold px-3 py-1 rounded-full ${
-              currentSide === "left"
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-gray-100 text-gray-400"
-            }`}
-          >
-            ← 左側
-          </span>
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-sm font-bold px-3 py-1 rounded-full ${
+                currentSide === "right"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              → 右側
+            </span>
+            <span
+              className={`text-sm font-bold px-3 py-1 rounded-full ${
+                currentSide === "left"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              ← 左側
+            </span>
+          </div>
+          {waitingForSideStart && (
+            <button
+              onClick={() => setWaitingForSideStart(false)}
+              className="bg-emerald-500 text-white font-bold px-6 py-2 rounded-full hover:bg-emerald-600 transition-colors animate-pop-in text-sm"
+            >
+              ← 左側をはじめる
+            </button>
+          )}
         </div>
       )}
     </div>
