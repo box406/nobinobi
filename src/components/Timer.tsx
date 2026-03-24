@@ -10,8 +10,21 @@ interface TimerProps {
   isStarted: boolean;
 }
 
-interface TimerHandle {
-  onSideStart: () => void;
+function playBeep(isLast: boolean) {
+  try {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.frequency.value = isLast ? 880 : 660;
+    gain.gain.value = 0.3;
+    oscillator.start();
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (isLast ? 0.3 : 0.15));
+    oscillator.stop(ctx.currentTime + (isLast ? 0.3 : 0.15));
+  } catch {
+    // Audio not supported
+  }
 }
 
 export default function Timer({
@@ -45,6 +58,7 @@ export default function Timer({
     intervalRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
+          playBeep(true);
           if (sides === "both" && currentSide === "right") {
             setCurrentSide("left");
             setWaitingForSideStart(true);
@@ -53,6 +67,10 @@ export default function Timer({
           clearTimer();
           onComplete();
           return 0;
+        }
+        // Play beep at 5, 4, 3, 2, 1
+        if (prev <= 6) {
+          playBeep(prev === 2);
         }
         return prev - 1;
       });
