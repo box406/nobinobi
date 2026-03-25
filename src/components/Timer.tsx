@@ -10,18 +10,27 @@ interface TimerProps {
   isStarted: boolean;
 }
 
+// Reuse AudioContext to avoid latency from creating new ones
+let audioCtx: AudioContext | null = null;
+function getAudioCtx(): AudioContext {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+}
+
 function playBeep(isLast: boolean) {
   try {
-    const ctx = new AudioContext();
+    const ctx = getAudioCtx();
+    if (ctx.state === "suspended") ctx.resume();
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
     oscillator.connect(gain);
     gain.connect(ctx.destination);
     oscillator.frequency.value = isLast ? 880 : 660;
     gain.gain.value = 0.3;
-    oscillator.start();
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (isLast ? 0.3 : 0.15));
-    oscillator.stop(ctx.currentTime + (isLast ? 0.3 : 0.15));
+    const dur = isLast ? 0.3 : 0.15;
+    oscillator.start(ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + dur);
+    oscillator.stop(ctx.currentTime + dur);
   } catch {
     // Audio not supported
   }
@@ -40,12 +49,15 @@ export default function Timer({
     sides === "both" ? "right" : "done"
   );
   const [waitingForSideStart, setWaitingForSideStart] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const lastTickRef = useRef<number>(0);
+  const timeLeftRef = useRef(duration);
 
   const clearTimer = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     }
   }, []);
 
@@ -55,32 +67,49 @@ export default function Timer({
       return;
     }
 
-    intervalRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
+    startTimeRef.current = performance.now();
+    lastTickRef.current = timeLeftRef.current;
+
+    const tick = (now: number) => {
+      const elapsed = (now - startTimeRef.current) / 1000;
+      const newTimeLeft = Math.max(0, Math.round(lastTickRef.current - elapsed));
+
+      if (newTimeLeft !== timeLeftRef.current) {
+        timeLeftRef.current = newTimeLeft;
+
+        // Play beep when display changes to 5, 4, 3, 2, 1, 0
+        if (newTimeLeft <= 5 && newTimeLeft > 0) {
+          playBeep(false);
+        }
+
+        if (newTimeLeft <= 0) {
           playBeep(true);
           if (sides === "both" && currentSide === "right") {
             setCurrentSide("left");
             setWaitingForSideStart(true);
-            return duration;
+            timeLeftRef.current = duration;
+            setTimeLeft(duration);
+            return; // Stop RAF
           }
+          setTimeLeft(0);
           clearTimer();
           onComplete();
-          return 0;
+          return; // Stop RAF
         }
-        // Play beep at 5, 4, 3, 2, 1
-        if (prev <= 6) {
-          playBeep(prev === 2);
-        }
-        return prev - 1;
-      });
-    }, 1000);
 
+        setTimeLeft(newTimeLeft);
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
     return clearTimer;
   }, [isStarted, isPaused, waitingForSideStart, currentSide, sides, duration, onComplete, clearTimer]);
 
   // Reset when duration changes (new stretch)
   useEffect(() => {
+    timeLeftRef.current = duration;
     setTimeLeft(duration);
     setCurrentSide(sides === "both" ? "right" : "done");
     setWaitingForSideStart(false);

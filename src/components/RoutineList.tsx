@@ -5,10 +5,11 @@ import type { Routine } from "@/lib/storage";
 interface RoutineListProps {
   routines: Routine[];
   onSelect: (routine: Routine) => void;
+  onEdit: (routine: Routine) => void;
   onDelete: (id: string) => void;
 }
 
-export default function RoutineList({ routines, onSelect, onDelete }: RoutineListProps) {
+export default function RoutineList({ routines, onSelect, onEdit, onDelete }: RoutineListProps) {
   if (routines.length === 0) {
     return (
       <div className="text-center py-8 text-emerald-600/60">
@@ -37,6 +38,21 @@ export default function RoutineList({ routines, onSelect, onDelete }: RoutineLis
                 {routine.stretchIds.length}種目
               </p>
             </div>
+          </button>
+          <button
+            onClick={() => onEdit(routine)}
+            className="p-2 text-emerald-400 hover:text-emerald-600 transition-colors"
+            aria-label="編集"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
           <button
             onClick={() => onDelete(routine.id)}

@@ -1,20 +1,38 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import BodyPartFilter from "@/components/BodyPartFilter";
 import StretchIllustration from "@/components/StretchIllustration";
 import BottomNav from "@/components/BottomNav";
 import { getRoutines, setRoutines } from "@/lib/storage";
 import stretches from "@/data/stretches.json";
 
-export default function BuilderPage() {
+function BuilderContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+
   const [bodyPartFilter, setBodyPartFilter] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [routineName, setRoutineName] = useState("");
   const [routineEmoji, setRoutineEmoji] = useState("💪");
   const [step, setStep] = useState<"select" | "configure">("select");
+  const [isEdit, setIsEdit] = useState(false);
+
+  // Load existing routine if editing
+  useEffect(() => {
+    if (!editId) return;
+    const routines = getRoutines();
+    const routine = routines.find((r) => r.id === editId);
+    if (routine) {
+      setSelectedIds(routine.stretchIds);
+      setRoutineName(routine.name);
+      setRoutineEmoji(routine.emoji);
+      setIsEdit(true);
+      setStep("configure");
+    }
+  }, [editId]);
 
   const filtered = bodyPartFilter
     ? stretches.filter((s) => s.bodyPart.includes(bodyPartFilter))
@@ -26,20 +44,42 @@ export default function BuilderPage() {
     );
   }, []);
 
+  const moveStretch = useCallback((index: number, direction: "up" | "down") => {
+    setSelectedIds((prev) => {
+      const next = [...prev];
+      const swapIndex = direction === "up" ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= next.length) return prev;
+      [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+      return next;
+    });
+  }, []);
+
   const handleSave = useCallback(() => {
     if (!routineName.trim() || selectedIds.length === 0) return;
 
     const routines = getRoutines();
-    const newRoutine = {
-      id: Date.now().toString(),
-      name: routineName.trim(),
-      emoji: routineEmoji,
-      stretchIds: selectedIds,
-      createdAt: new Date().toISOString(),
-    };
-    setRoutines([...routines, newRoutine]);
+
+    if (isEdit && editId) {
+      // Update existing routine
+      const updated = routines.map((r) =>
+        r.id === editId
+          ? { ...r, name: routineName.trim(), emoji: routineEmoji, stretchIds: selectedIds }
+          : r
+      );
+      setRoutines(updated);
+    } else {
+      // Create new routine
+      const newRoutine = {
+        id: Date.now().toString(),
+        name: routineName.trim(),
+        emoji: routineEmoji,
+        stretchIds: selectedIds,
+        createdAt: new Date().toISOString(),
+      };
+      setRoutines([...routines, newRoutine]);
+    }
     router.push("/");
-  }, [routineName, routineEmoji, selectedIds, router]);
+  }, [routineName, routineEmoji, selectedIds, isEdit, editId, router]);
 
   const emojiOptions = ["💪", "🧘", "🔥", "⭐", "🌙", "☀️", "🏃", "🎯", "🌈", "🍀"];
 
@@ -55,7 +95,7 @@ export default function BuilderPage() {
           </button>
 
           <h1 className="text-xl font-black text-emerald-800 mb-6">
-            メニューの設定
+            {isEdit ? "メニューを編集" : "メニューの設定"}
           </h1>
 
           <div className="mb-6">
@@ -97,7 +137,7 @@ export default function BuilderPage() {
               選択した種目（{selectedIds.length}）
             </p>
             <div className="space-y-2">
-              {selectedIds.map((id) => {
+              {selectedIds.map((id, index) => {
                 const s = stretches.find((x) => x.id === id);
                 if (!s) return null;
                 return (
@@ -105,6 +145,28 @@ export default function BuilderPage() {
                     key={id}
                     className="flex items-center gap-2 bg-white/80 rounded-xl px-3 py-2"
                   >
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <button
+                        onClick={() => moveStretch(index, "up")}
+                        disabled={index === 0}
+                        className="text-emerald-400 hover:text-emerald-600 disabled:opacity-20 transition-colors p-0.5"
+                        aria-label="上へ"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M7 3L3 8h8L7 3z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => moveStretch(index, "down")}
+                        disabled={index === selectedIds.length - 1}
+                        className="text-emerald-400 hover:text-emerald-600 disabled:opacity-20 transition-colors p-0.5"
+                        aria-label="下へ"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M7 11L3 6h8L7 11z" fill="currentColor" />
+                        </svg>
+                      </button>
+                    </div>
                     <StretchIllustration stretchId={s.id} className="shrink-0 [&_svg]:w-16 [&_svg]:h-16 [&_svg]:max-w-16 [&_svg]:max-h-16" />
                     <span className="text-sm font-bold text-emerald-800 flex-1">
                       {s.nameShort}
@@ -125,7 +187,7 @@ export default function BuilderPage() {
             disabled={!routineName.trim()}
             className="w-full bg-emerald-500 text-white font-bold py-3 rounded-full hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            保存する
+            {isEdit ? "更新する" : "保存する"}
           </button>
         </div>
         <BottomNav />
@@ -218,5 +280,13 @@ export default function BuilderPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+export default function BuilderPage() {
+  return (
+    <Suspense>
+      <BuilderContent />
+    </Suspense>
   );
 }

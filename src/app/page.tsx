@@ -50,6 +50,13 @@ export default function Home() {
     [router]
   );
 
+  const handleRoutineEdit = useCallback(
+    (routine: Routine) => {
+      router.push(`/builder?edit=${routine.id}`);
+    },
+    [router]
+  );
+
   const handleRoutineDelete = useCallback((id: string) => {
     const updated = getRoutines().filter((r) => r.id !== id);
     setRoutines(updated);
@@ -128,6 +135,7 @@ export default function Home() {
           <RoutineList
             routines={routines}
             onSelect={handleRoutineSelect}
+            onEdit={handleRoutineEdit}
             onDelete={handleRoutineDelete}
           />
         </div>
