@@ -1,8 +1,28 @@
 "use client";
 
+import { ReactElement } from "react";
+import { getNeckPose } from "./poses/neckPoses";
+import { getShoulderPose } from "./poses/shoulderPoses";
+import { getBackPose } from "./poses/backPoses";
+import { getHipPose } from "./poses/hipPoses";
+import { getHipJointPose } from "./poses/hipJointPoses";
+import { getLegPose } from "./poses/legPoses";
+import { getWholeBodyPose } from "./poses/wholeBodyPoses";
+
 interface Props {
   stretchId: number;
   className?: string;
+}
+
+function getCustomPose(id: number, uid: string): ReactElement | null {
+  if (id <= 9) return getNeckPose(id, uid);
+  if (id <= 18) return getShoulderPose(id, uid);
+  if (id <= 27) return getBackPose(id, uid);
+  if (id <= 35) return getHipPose(id, uid);
+  if (id <= 44) return getHipJointPose(id, uid);
+  if (id <= 52) return getLegPose(id, uid);
+  if (id <= 60) return getWholeBodyPose(id, uid);
+  return null;
 }
 
 // Map stretch IDs to animated pose types
@@ -797,9 +817,12 @@ function AnimatedPose({ pose, uid }: { pose: string; uid: string }) {
 }
 
 export default function StretchIllustration({ stretchId, className = "" }: Props) {
-  const pose = getPoseType(stretchId);
   // Unique ID to prevent animation name collisions when multiple instances render
   const uid = `p${stretchId}`;
+
+  // 60種専用ポーズ。万一未割当ならレガシーへフォールバック。
+  const customPose = getCustomPose(stretchId, uid);
+  const pose = getPoseType(stretchId);
 
   return (
     <div className={`flex items-center justify-center ${className}`}>
@@ -808,7 +831,7 @@ export default function StretchIllustration({ stretchId, className = "" }: Props
         className="w-full h-full max-w-[200px] max-h-[200px] drop-shadow-sm"
       >
         <rect width="100" height="100" rx="16" fill={C.bg} fillOpacity="0.5" />
-        <AnimatedPose pose={pose} uid={uid} />
+        {customPose ?? <AnimatedPose pose={pose} uid={uid} />}
       </svg>
     </div>
   );
